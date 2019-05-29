@@ -1,0 +1,6 @@
+*.pth
+runs/
+checkpoints/
+.ipynb_checkpoints/
+__pycache__/
+torchdiffeq/
