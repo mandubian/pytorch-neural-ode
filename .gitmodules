@@ -1,0 +1,4 @@
+[submodule "torchdiffeq"]
+    path = torchdiffeq
+    url = git@github.com:rtqichen/torchdiffeq.git
+    ignore = dirty
