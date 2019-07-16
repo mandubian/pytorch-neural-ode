@@ -2,3 +2,6 @@
     path = torchdiffeq
     url = git@github.com:rtqichen/torchdiffeq.git
     ignore = dirty
+[submodule "node-transformer-fair/fairseq"]
+	path = node-transformer-fair/fairseq
+	url = https://github.com/pytorch/fairseq.git

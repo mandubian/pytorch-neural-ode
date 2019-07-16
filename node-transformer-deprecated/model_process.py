@@ -6,20 +6,26 @@ import torch
 from torch.utils import data
 import torch.nn.functional as F
 from transformer import Constants
-from transformer.Translator import Translator
+#from transformer.Translator import Translator
+from NodeTranslator import NodeTranslator
 
 from loss import compute_performance
 from checkpoints import rotating_save_checkpoint, build_checkpoint
 
+from progress_bar import ProgressBar
 
-def train_epoch(model, training_data, timesteps, optimizer, device, epoch, tb=None, log_interval=100):
+
+def train_epoch(model, training_data, timesteps, optimizer, device, epoch, pb, tb=None, log_interval=100):
     model.train()
   
     total_loss = 0
     n_word_total = 0
     n_word_correct = 0
     
-    for batch_idx, batch in enumerate(tqdm(training_data, mininterval=2, leave=False)):
+    model.reset_nfes()
+    
+    #for batch_idx, batch in enumerate(tqdm(training_data, mininterval=2, leave=False)):
+    for batch_idx, batch in enumerate(training_data):
         batch_qs, batch_qs_pos, batch_as, batch_as_pos = map(lambda x: x.to(device), batch)
         gold_as = batch_as[:, 1:]
 
@@ -46,10 +52,20 @@ def train_epoch(model, training_data, timesteps, optimizer, device, epoch, tb=No
                 {
                     "loss_per_word" : total_loss / n_word_total,
                     "accuracy" : n_word_correct / n_word_total,
+                    "nfe_encoder": model.nfes[0],
+                    "nfe_decoder": model.nfes[1],
                 },
                 group="train",
                 sub_group="batch",
                 global_step=epoch * len(training_data) + batch_idx
+            )
+            
+        if pb is not None:
+            pb.training_step(
+                {
+                    "train_loss": total_loss / n_word_total,
+                    "train_accuracy": 100 * n_word_correct / n_word_total,
+                }
             )
 
     loss_per_word = total_loss / n_word_total
@@ -60,6 +76,8 @@ def train_epoch(model, training_data, timesteps, optimizer, device, epoch, tb=No
             {
                 "loss_per_word" : loss_per_word,
                 "accuracy" : accuracy,
+                "nfe_encoder": model.nfes[0],
+                "nfe_decoder": model.nfes[1],
             },
             group="train",
             sub_group="epoch",
@@ -77,7 +95,8 @@ def eval_epoch(model, validation_data, timesteps, device, epoch, tb=None, log_in
     n_word_correct = 0
     
     with torch.no_grad():
-        for batch_idx, batch in enumerate(tqdm(validation_data, mininterval=2, leave=False)):
+        #for batch_idx, batch in enumerate(tqdm(validation_data, mininterval=2, leave=False)):
+        for batch_idx, batch in enumerate(validation_data):
             # prepare data
             batch_qs, batch_qs_pos, batch_as, batch_as_pos = map(lambda x: x.to(device), batch)
             gold_as = batch_as[:, 1:]
@@ -115,15 +134,26 @@ def train(exp_name, unique_id,
           model, training_data, validation_data, timesteps,
           optimizer, device, epochs,
           tb=None, log_interval=100,
-          start_epoch=0, best_valid_accu=0.0, best_valid_loss=float('Inf')):
+          start_epoch=0, best_valid_accu=0.0, best_valid_loss=float('Inf'), checkpoint_desc={}):
   model = model.to(device)
   timesteps = timesteps.to(device)
   print(f"Loaded model and timesteps to {device}")
+
+  
+  pb = ProgressBar(
+    epochs,
+    len(training_data),
+    destroy_on_completed=False,
+    keys_to_plot=["train_loss", "valid_accu", "best_valid_loss", "best_valid_accu"],
+  )
+
   for epoch_i in range(start_epoch, epochs):
+    pb.start_epoch(epoch_i)
+
     print('[ Epoch', epoch_i, ']')
 
     start = time.time()
-    train_loss, train_accu = train_epoch(model, training_data, timesteps, optimizer, device, epoch_i, tb, log_interval)
+    train_loss, train_accu = train_epoch(model, training_data, timesteps, optimizer, device, epoch_i, pb, tb, log_interval)
     print('[Training]  loss: {train_loss}, ppl: {ppl: 8.5f}, accuracy: {accu:3.3f} %, '\
           'elapse: {elapse:3.3f}ms'.format(
               train_loss=train_loss, ppl=math.exp(min(train_loss, 100)), accu=100*train_accu,
@@ -140,10 +170,20 @@ def train(exp_name, unique_id,
         print("Checkpointing Validation Model...")
         best_valid_accu = valid_accu
         best_valid_loss = valid_loss
-        state = build_checkpoint(exp_name, unique_id, "validation", model, optimizer, best_valid_accu, best_valid_loss, epoch_i)
+        state = build_checkpoint(exp_name, unique_id, "validation", model, optimizer, best_valid_accu, best_valid_loss, epoch_i, checkpoint_desc)
         rotating_save_checkpoint(state, prefix=f"{exp_name}_{unique_id}_validation", path="./checkpoints", nb=5)    
+
+    pb.end_epoch(
+        {
+          "train_loss": train_loss, "train_accu": train_accu,
+          "valid_loss": valid_loss, "valid_accu": valid_accu,
+          "best_valid_loss": best_valid_loss, "best_valid_accu": best_valid_accu,
+        }
+    )    
     
-def predict(translator, data, device, max_predictions=None):
+  pb.close()
+        
+def predict(translator, data, timesteps, device, max_predictions=None):
     if max_predictions is not None:
         cur = max_predictions
     else:
@@ -155,7 +195,7 @@ def predict(translator, data, device, max_predictions=None):
             break
         
         batch_qs, batch_qs_pos = map(lambda x: x.to(device), batch)
-        all_hyp, all_scores = translator.translate_batch(batch_qs, batch_qs_pos)
+        all_hyp, all_scores = translator.translate_batch(batch_qs, batch_qs_pos, timesteps)
         
         for i, idx_seqs in enumerate(all_hyp):
             for j, idx_seq in enumerate(idx_seqs):
@@ -167,12 +207,12 @@ def predict(translator, data, device, max_predictions=None):
     return resps
                 
 
-def predict_dataset(dataset, model, device, callback, max_token_seq_len, max_batches=None,
+def predict_dataset(dataset, model, timesteps, device, callback, max_token_seq_len, max_batches=None,
                     beam_size=5, n_best=1,
                     batch_size=1, num_workers=1):
     
-    translator = Translator(model, device, beam_size=beam_size,
-                          max_token_seq_len=max_token_seq_len, n_best=n_best)
+    translator = NodeTranslator(model, device, beam_size=beam_size,
+                                max_token_seq_len=max_token_seq_len, n_best=n_best)
 
     if max_batches is not None:
         cur = max_batches
@@ -185,9 +225,9 @@ def predict_dataset(dataset, model, device, callback, max_token_seq_len, max_bat
             break
         
         batch_qs, batch_qs_pos, _, _ = map(lambda x: x.to(device), batch)
-        all_hyp, all_scores = translator.translate_batch(batch_qs, batch_qs_pos)
+        all_hyp, all_scores = translator.translate_batch(batch_qs, batch_qs_pos, timesteps)
         
-        callback(batch_idx, all_hyp, all_scores)
+        callback(batch_idx, batch, all_hyp, all_scores)
         
         cur -= 1
     return resps
@@ -205,24 +245,20 @@ def predict_multiple(questions, model, device, max_token_seq_len, beam_size=5,
     return predict(translator, questions, device)
     
     
-def predict_single(question, model, device, max_token_seq_len, beam_size=5,
+def predict_single(qs, qs_pos, model, timesteps, device, max_token_seq_len, beam_size=5,
                    n_best=1):
+    model = model.eval()
+    translator = NodeTranslator(model, device, beam_size=beam_size,
+                                max_token_seq_len=max_token_seq_len, n_best=n_best)
     
-    translator = Translator(model, device, beam_size=beam_size,
-                          max_token_seq_len=max_token_seq_len, n_best=n_best)
-    
-    qs = [np_encode_string(question)]
-    qs, qs_pos = question_to_position_batch_collate_fn(qs)
     qs, qs_pos = qs.to(device), qs_pos.to(device)
     
-    all_hyp, all_scores = translator.translate_batch(qs, qs_pos)
-    resp = np_decode_string(np.array(all_hyp[0][0]))
+    all_hyp, all_scores = translator.translate_batch(qs, qs_pos, timesteps)
     
     resps = []
     for i, idx_seqs in enumerate(all_hyp):
         for j, idx_seq in enumerate(idx_seqs):
-            r = np_decode_string(np.array(idx_seq))
             s = all_scores[i][j].cpu().item()
-            resps.append({"resp":r, "score":s})
+            resps.append({"resp":np.array(idx_seq), "score":s})
     
     return resps

@@ -28,7 +28,7 @@ def rotating_save_checkpoint(state, prefix, path="./checkpoints", nb=5):
             first = filename
         torch.save(state, filenames[-1])
 
-def build_checkpoint(exp_name, unique_id, tpe, model, optimizer, acc, loss, epoch):
+def build_checkpoint(exp_name, unique_id, tpe, model, optimizer, acc, loss, epoch, desc={}):
     return {
         "exp_name": exp_name,
         "unique_id": unique_id,
@@ -38,6 +38,7 @@ def build_checkpoint(exp_name, unique_id, tpe, model, optimizer, acc, loss, epoc
         "acc": acc,
         "loss": loss,
         "epoch": epoch,
+        "desc": desc,
     }
             
 def restore_checkpoint(filename, model=None, optimizer=None):

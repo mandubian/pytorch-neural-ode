@@ -88,3 +88,28 @@ class TranslationDataset(torch.utils.data.Dataset):
         if self._tgt_insts:
             return self._src_insts[idx], self._tgt_insts[idx]
         return self._src_insts[idx]
+
+    
+def prepare_dataloaders(data, batch_size=64, num_workers=2):
+    train_loader = torch.utils.data.DataLoader(
+        TranslationDataset(
+            src_word2idx=data['dict']['src'],
+            tgt_word2idx=data['dict']['tgt'],
+            src_insts=data['train']['src'],
+            tgt_insts=data['train']['tgt']),
+        num_workers=num_workers,
+        batch_size=batch_size,
+        collate_fn=paired_collate_fn,
+        shuffle=True)
+
+    valid_loader = torch.utils.data.DataLoader(
+        TranslationDataset(
+            src_word2idx=data['dict']['src'],
+            tgt_word2idx=data['dict']['tgt'],
+            src_insts=data['valid']['src'],
+            tgt_insts=data['valid']['tgt']),
+        num_workers=num_workers,
+        batch_size=batch_size,
+        collate_fn=paired_collate_fn,
+        shuffle=False)
+    return train_loader, valid_loader    

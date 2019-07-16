@@ -5,3 +5,5 @@ checkpoints/
 */.ipynb_checkpoints/
 __pycache__/
 torchdiffeq/
+.data
+node-transformer-fair/wmt14.en-fr.fconv-py
