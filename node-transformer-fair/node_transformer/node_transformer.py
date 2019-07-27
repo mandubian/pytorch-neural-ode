@@ -411,14 +411,9 @@ class NodeTransformerDecoder(FairseqIncrementalDecoder):
             ])
 
         self.adaptive_softmax = None
-
-        # AUGMENTED NODE
-        self.augment_embed_dim = embed_dim + self.augment_dims * args.decoder_attention_heads
-        #if self.time_dependent:
-        #    self.augment_embed_dim += 1 * args.decoder_attention_heads
         
-        self.project_out_dim = Linear(self.augment_embed_dim, self.output_embed_dim, bias=False) \
-            if self.augment_embed_dim != self.output_embed_dim and not args.tie_adaptive_weights else None
+        self.project_out_dim = Linear(embed_dim, self.output_embed_dim, bias=False) \
+            if embed_dim != self.output_embed_dim and not args.tie_adaptive_weights else None
 
         if args.adaptive_softmax_cutoff is not None:
             self.adaptive_softmax = AdaptiveSoftmax(
@@ -435,6 +430,8 @@ class NodeTransformerDecoder(FairseqIncrementalDecoder):
             nn.init.normal_(self.embed_out, mean=0, std=self.output_embed_dim ** -0.5)
 
         if args.decoder_normalize_before and not getattr(args, 'no_decoder_final_norm', False):
+            # AUGMENTED NODE
+            self.augment_embed_dim = embed_dim + self.augment_dims * args.decoder_attention_heads
             self.layer_norm = LayerNorm(self.augment_embed_dim)
         else:
             self.layer_norm = None
@@ -1021,6 +1018,22 @@ class NodeTransformerDecoderLayer_Separated(nn.Module):
         self.augment_dims = args.node_augment_dims
         self.time_dependent = args.node_time_dependent
         self.decoder_attention_heads = args.decoder_attention_heads
+        self.embed_dim = args.decoder_embed_dim
+
+        self.dropout = args.dropout
+        self.activation_fn = utils.get_activation_fn(
+            activation=getattr(args, 'activation_fn', 'relu')
+        )
+        self.activation_dropout = getattr(args, 'activation_dropout', 0)
+        if self.activation_dropout == 0:
+            # for backwards compatibility with models that use args.relu_dropout
+            self.activation_dropout = getattr(args, 'relu_dropout', 0)
+        
+        self.fc1 = Linear(self.func_ode.initial_embed_dim, self.embed_dim)
+        #self.fc2 = Linear(args.decoder_ffn_embed_dim, self.embed_dim)
+        export = getattr(args, 'char_inputs', False)
+        self.normalize_before = args.decoder_normalize_before
+        self.final_layer_norm = LayerNorm(self.embed_dim, export=export)
         
 
     def forward(
@@ -1078,12 +1091,23 @@ class NodeTransformerDecoderLayer_Separated(nn.Module):
                         },
                         rtol=self.rtol, atol=self.atol)
         # keep only last time step
-        output = output[-1, :, :]
+        x = output[-1, :, :]
+        
+        # Final FCs
+        #residual = x
+        #x = self.maybe_layer_norm(self.final_layer_norm, x, before=True)
+        x = self.activation_fn(self.fc1(x))
+        x = F.dropout(x, p=self.activation_dropout, training=self.training)
+        #x = self.fc2(x)
+        #x = F.dropout(x, p=self.dropout, training=self.training)
+        #x = residual + x
+        x = self.maybe_layer_norm(self.final_layer_norm, x, after=True)
+        
         # customizing a bit because with ODE we can't return many values for ODE Solver
         if self.func_ode.onnx_trace and incremental_state is not None:
-            return output, self.func_ode.cur_attn, self_attn
+            return x, self.func_ode.cur_attn, self_attn
         else:
-            return output, self_attn
+            return x, self_attn
 
     def nfe(self):
         return self.func_ode.nfe
@@ -1091,6 +1115,12 @@ class NodeTransformerDecoderLayer_Separated(nn.Module):
     def reset_nfe(self):
         self.func_ode.nfe = 0    
             
+    def maybe_layer_norm(self, layer_norm, x, before=False, after=False):
+        assert before ^ after
+        if after ^ self.normalize_before:
+            return layer_norm(x)
+        else:
+            return x
         
 class TransformerDecoderLayerFunc_SelfAttn(nn.Module):
     """Decoder layer block.
@@ -1462,9 +1492,9 @@ class NodeTransformerDecoderLayerFunc_EncoderAttn(nn.Module):
         #residual = x
         x = self.maybe_layer_norm(self.final_layer_norm, x, before=True)
         x = self.activation_fn(self.fc1(x))
-        #x = F.dropout(x, p=self.activation_dropout, training=self.training)
+        x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
-        #x = F.dropout(x, p=self.dropout, training=self.training)
+        x = F.dropout(x, p=self.dropout, training=self.training)
         #x = residual + x
         x = self.maybe_layer_norm(self.final_layer_norm, x, after=True)
         # customizing a bit because with ODE we can't return many values for ODE Solver
