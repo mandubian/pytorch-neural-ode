@@ -11,8 +11,11 @@ This project is a study about the NODE-Transformer, cross-breeding Transformer w
 
 An in-depth study can be found in this [notebook](node-transformer-fair/node-transformer-fair.ipynb) and you'll see that the main difference with usual Deep Learning studies is that it's not breaking any SOTA, it's not really successful or novel and worse, it's not at all ecological as it consumes lots of energy for not so good results. But I hope that as me, you will find those ideas and concepts enlightening and refreshing and finally worth the efforts.
 
+----
+
 **REQUEST FOR RESOURCES: If you like this topic and have GPU resources that you can share for free and want to help perform more studies on that idea, don't hesitate to contact me on Twitter @mandubian or Github, I'd be happy to consume your resources ;)**
 
+----
 
 ### Implementation details
 
