@@ -1,4 +1,6 @@
-# NODE-Transformer
+This repository is aimed at experimenting Different ideas with Neural-ODE in Pytorch
+
+## First idea: NODE-Transformer
 
 > You can contact me on twitter as [@mandubian](http://twitter.com/mandubian)
 
@@ -9,9 +11,9 @@ This project is a study about the NODE-Transformer, cross-breeding Transformer w
 An in-depth study can be found in this [notebook](node-transformer-fair/node-transformer-fair.ipynb) and you'll see that the main difference with usual Deep Learning studies is that it's not breaking any SOTA, it's not really successful or novel and worse, it's not at all ecological as it consumes lots of energy for not so good results. But I hope that as me, you will find those ideas and concepts enlightening and refreshing and finally worth the efforts.
 
 
-## Implementation details
+### Implementation details
 
-### Hacking TorchDiffEq Neural-ODE
+#### Hacking TorchDiffEq Neural-ODE
 
 In this project, Pytorch is the framework used and Neural-ODE implementation is found in [torchdiffeq github](https://github.com/rtqichen/torchdiffeq).
 
