@@ -211,19 +211,6 @@ class NodeTransformerModel(FairseqEncoderDecoderModel):
         else:
             return TransformerDecoder(args, tgt_dict, embed_tokens)
 
-    #@property
-    #def nfe(self):
-    #    nfe_enc = 0
-    #    nfe_dec = 0
-    #    if args.node_encoder:
-    #        nfe_enc = self.encoder.nfe
-    #    if args.node_decoder:
-    #        nfe_dec = self.decoder.nfe
-    #    return nfe_enc, nfe_dec
-    
-    #def reset_nfe(self):
-    #    self.encoder.reset_nfe()
-    #    self.decoder.reset_nfe()
         
 class NodeTransformerEncoder(FairseqEncoder):
     """
@@ -242,7 +229,12 @@ class NodeTransformerEncoder(FairseqEncoder):
 
         self.dropout = args.dropout
 
+        self.augment_dims = args.node_augment_dims
+        self.time_dependent = args.node_time_dependent
+        
         embed_dim = embed_tokens.embedding_dim
+        self.output_embed_dim = args.encoder_embed_dim + self.augment_dims * args.encoder_attention_heads
+        
         self.padding_idx = embed_tokens.padding_idx
         self.max_source_positions = args.max_source_positions
 
@@ -259,6 +251,9 @@ class NodeTransformerEncoder(FairseqEncoder):
             for i in range(args.encoder_layers)
         ])
 
+        self.project_out_dim = Linear(self.output_embed_dim, embed_dim, bias=False) \
+            if embed_dim != self.output_embed_dim else None
+        
         if args.encoder_normalize_before:
             self.layer_norm = LayerNorm(embed_dim)
         else:
@@ -297,6 +292,9 @@ class NodeTransformerEncoder(FairseqEncoder):
         for layer in self.layers:
             x = layer(x, encoder_padding_mask)
 
+        if self.project_out_dim:
+            x = self.project_out_dim(x)
+            
         if self.layer_norm:
             x = self.layer_norm(x)
 
@@ -383,6 +381,7 @@ class NodeTransformerDecoder(FairseqIncrementalDecoder):
 
         input_embed_dim = embed_tokens.embedding_dim
         embed_dim = args.decoder_embed_dim
+        self.embed_dim_augmented = embed_dim + self.augment_dims * args.decoder_attention_heads
         self.output_embed_dim = args.decoder_output_dim
 
         padding_idx = embed_tokens.padding_idx
@@ -412,8 +411,8 @@ class NodeTransformerDecoder(FairseqIncrementalDecoder):
 
         self.adaptive_softmax = None
         
-        self.project_out_dim = Linear(embed_dim, self.output_embed_dim, bias=False) \
-            if embed_dim != self.output_embed_dim and not args.tie_adaptive_weights else None
+        self.project_out_dim = Linear(self.embed_dim_augmented, self.output_embed_dim, bias=False) \
+            if self.embed_dim_augmented != self.output_embed_dim and not args.tie_adaptive_weights else None
 
         if args.adaptive_softmax_cutoff is not None:
             self.adaptive_softmax = AdaptiveSoftmax(
@@ -431,8 +430,7 @@ class NodeTransformerDecoder(FairseqIncrementalDecoder):
 
         if args.decoder_normalize_before and not getattr(args, 'no_decoder_final_norm', False):
             # AUGMENTED NODE
-            self.augment_embed_dim = embed_dim + self.augment_dims * args.decoder_attention_heads
-            self.layer_norm = LayerNorm(self.augment_embed_dim)
+            self.layer_norm = LayerNorm(self.embed_dim_augmented)
         else:
             self.layer_norm = None
 
@@ -602,8 +600,16 @@ class NodeTransformerEncoderLayer(nn.Module):
         self.func = NodeTransformerEncoderLayerFunc(args)
         self.ts = torch.FloatTensor(args.node_ts)
         self.max_num_steps = args.node_max_num_steps
+        self.augment_dims = args.node_augment_dims
+        self.encoder_attention_heads = args.decoder_attention_heads
 
     def forward(self, x, encoder_padding_mask):
+        if self.augment_dims > 0:
+            seq_len, batch, embed_dim = x.shape
+            aug = torch.zeros(seq_len, batch, self.augment_dims * self.encoder_attention_heads).to(x)
+            # Shape (seq_len, batch, embed_dim + augment_dims)
+            x = torch.cat([x, aug], 2)
+            
         output = odeint(self.func, x, self.ts,
                         method=self.method,
                         options={"encoder_padding_mask":encoder_padding_mask,
@@ -642,7 +648,15 @@ class NodeTransformerEncoderLayerFunc(nn.Module):
 
     def __init__(self, args):
         super().__init__()
-        self.embed_dim = args.encoder_embed_dim
+        self.augment_dims = args.node_augment_dims
+        self.time_dependent = args.node_time_dependent
+        self.encoder_attention_heads = args.encoder_attention_heads
+        #self.embed_dim = args.encoder_embed_dim
+        self.embed_dim = args.encoder_embed_dim + self.augment_dims * args.encoder_attention_heads
+        self.initial_embed_dim = self.embed_dim
+        if self.time_dependent:
+            self.embed_dim += 1 * args.decoder_attention_heads
+            
         self.self_attn = MultiheadAttention(
             self.embed_dim, args.encoder_attention_heads,
             dropout=args.attention_dropout, self_attention=True
@@ -658,8 +672,8 @@ class NodeTransformerEncoderLayerFunc(nn.Module):
             self.activation_dropout = getattr(args, 'relu_dropout', 0)
         self.normalize_before = args.encoder_normalize_before
         self.fc1 = Linear(self.embed_dim, args.encoder_ffn_embed_dim)
-        self.fc2 = Linear(args.encoder_ffn_embed_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
+        self.fc2 = Linear(args.encoder_ffn_embed_dim, self.initial_embed_dim)
+        self.final_layer_norm = LayerNorm(self.initial_embed_dim)
         self.nfe = 0
 
     def upgrade_state_dict_named(self, state_dict, name):
@@ -692,6 +706,13 @@ class NodeTransformerEncoderLayerFunc(nn.Module):
             encoded output of shape `(batch, src_len, embed_dim)`
         """
         self.nfe += 1
+        if self.time_dependent:
+            # enhancing x with time
+            # Shape (seq_len, batch_size, 1)
+            t_vec = torch.ones(x.shape[0], x.shape[1], 1 * self.encoder_attention_heads).to(x) * t
+            # Shape (seq_len, batch_size, data_dim + 1)
+            x = torch.cat([t_vec, x], 2)
+        
         #residual = x
         x = self.maybe_layer_norm(self.self_attn_layer_norm, x, before=True)
         x, _ = self.self_attn(query=x, key=x, value=x, key_padding_mask=encoder_padding_mask)
@@ -1018,7 +1039,7 @@ class NodeTransformerDecoderLayer_Separated(nn.Module):
         self.augment_dims = args.node_augment_dims
         self.time_dependent = args.node_time_dependent
         self.decoder_attention_heads = args.decoder_attention_heads
-        self.embed_dim = args.decoder_embed_dim
+        self.embed_dim = args.decoder_embed_dim + self.augment_dims * args.decoder_attention_heads
 
         self.dropout = args.dropout
         self.activation_fn = utils.get_activation_fn(
