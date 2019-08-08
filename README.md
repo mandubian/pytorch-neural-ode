@@ -52,6 +52,7 @@ Here are the new options to manipulate the new kind of FairSeq NODE-Transformer:
 
 ### Cite
 
+```
 @article{mandubian,
   author = {Voitot, Pascal},
   title = {the Tale of NODE-Transformer},
@@ -61,3 +62,4 @@ Here are the new options to manipulate the new kind of FairSeq NODE-Transformer:
   howpublished = {\url{https://github.com/mandubian/pytorch-neural-ode}},
   commit = {2452a08ef36d1bbe2b38bc8aeee5e602a413e407}
 }
+```
