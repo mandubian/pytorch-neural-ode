@@ -9,7 +9,7 @@ This repository is aimed at experimenting Different ideas with Neural-ODE in Pyt
 
 This project is a study about the NODE-Transformer, cross-breeding Transformer with Neural-ODE and based on [Facebook FairSeq Transformer](https://github.com/pytorch/fairseq) and [TorchDiffEq github](https://github.com/rtqichen/torchdiffeq).
 
-An in-depth study can be found in [node-transformer-fair notebook](node-transformer-fair/node-transformer-fair.ipynb) and you'll see that the main difference with usual Deep Learning studies is that it's not breaking any SOTA, it's not really successful or novel and worse, it's not at all ecological as it consumes lots of energy for not so good results. But I hope that as me, you will find those ideas and concepts enlightening and refreshing and finally worth the efforts.
+An in-depth study can be found in [node-transformer-fair notebook](https://nbviewer.jupyter.org/github/mandubian/pytorch-neural-ode/blob/master/node-transformer-fair/node-transformer-fair.ipynb) (_displayed with nbviewer because github doesn't display SVG embedded content :() and you'll see that the main difference with usual Deep Learning studies is that it's not breaking any SOTA, it's not really successful or novel and worse, it's not at all ecological as it consumes lots of energy for not so good results. But I hope that as me, you will find those ideas and concepts enlightening and refreshing and finally worth the efforts.
 
 ----
 
