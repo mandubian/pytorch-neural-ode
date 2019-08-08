@@ -50,4 +50,14 @@ Here are the new options to manipulate the new kind of FairSeq NODE-Transformer:
     --node-separated-decoder
 ```
 
+### Cite
 
+@article{mandubian,
+  author = {Voitot, Pascal},
+  title = {the Tale of NODE-Transformer},
+  year = {2019},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/mandubian/pytorch-neural-ode}},
+  commit = {2452a08ef36d1bbe2b38bc8aeee5e602a413e407}
+}
