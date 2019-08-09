@@ -9,13 +9,39 @@ This repository is aimed at experimenting Different ideas with Neural-ODE in Pyt
 
 This project is a study about the NODE-Transformer, cross-breeding Transformer with Neural-ODE and based on [Facebook FairSeq Transformer](https://github.com/pytorch/fairseq) and [TorchDiffEq github](https://github.com/rtqichen/torchdiffeq).
 
-An in-depth study can be found in [node-transformer-fair notebook](https://nbviewer.jupyter.org/github/mandubian/pytorch-neural-ode/blob/master/node-transformer-fair/node-transformer-fair.ipynb) (_displayed with nbviewer because github doesn't display SVG embedded content :() and you'll see that the main difference with usual Deep Learning studies is that it's not breaking any SOTA, it's not really successful or novel and worse, it's not at all ecological as it consumes lots of energy for not so good results. But I hope that as me, you will find those ideas and concepts enlightening and refreshing and finally worth the efforts.
+An in-depth study can be found in [node-transformer-fair notebook](https://nbviewer.jupyter.org/github/mandubian/pytorch-neural-ode/blob/master/node-transformer-fair/node-transformer-fair.ipynb) (_displayed with nbviewer because github doesn't display SVG embedded content :(_) and you'll see that the main difference with usual Deep Learning studies is that it's not breaking any SOTA, it's not really successful or novel and worse, it's not at all ecological as it consumes lots of energy for not so good results.
+
+But, it goes through many concepts such as:
+
+- Neural-ODE being mathematical limit of Resnet as depth grows infinite, 
+
+- Neural-ODE naturally increasing complexity during training,
+
+- The difference of behavior of Transformer encoder/decoder with respect to knowledge complexity during training,
+
+- The Limitations of Neural-ODE in representing certain kinds of functions and how it is solved in [Augmented Neural ODEs](http://arxiv.org/abs/1904.01681).
+
+- Regularization like weight decay can reduce Neural-ODE complexity increase during training with a cost in performance.
+
+I hope that as me, you will find those ideas and concepts enlightening and refreshing and finally worth the efforts.
+
+
 
 ----
 
 **REQUEST FOR RESOURCES: If you like this topic and have GPU resources that you can share for free and want to help perform more studies on that idea, don't hesitate to contact me on Twitter @mandubian or Github, I'd be happy to consume your resources ;)**
 
 ----
+
+### References
+
+1. Neural Ordinary Differential Equations, Chen & al (2018), http://arxiv.org/abs/1806.07366,
+
+2. Augmented Neural ODEs, Dupont, Doucet, Teh (2018), http://arxiv.org/abs/1904.01681,
+
+3. Neural ODEs as the Deep Limit of ResNets with constant weights, Avelin, Nyström (2019), https://arxiv.org/abs/1906.12183v1,
+
+4. FFJORD: Free-form Continuous Dynamics for Scalable Reversible Generative Models, Grathwohl & al (2018), http://arxiv.org/abs/1810.01367
 
 ### Implementation details
 
